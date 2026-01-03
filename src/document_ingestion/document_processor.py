@@ -1,5 +1,6 @@
 """Document processing module for Code-Aware analysis"""
 from typing import List
+from pathlib import Path
 from langchain_community.document_loaders.generic import GenericLoader
 from langchain_community.document_loaders.parsers import LanguageParser
 from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
@@ -15,17 +16,25 @@ class DocumentProcessor:
     def process_codebase(self, path: str) -> List[Document]:
         """
         Loads code files and splits them based on Language-specific syntax.
-        Focuses on Python files by default.
+        Uses from_filesystem to correctly load local directories.
         """
-        loader = GenericLoader.from_custom_extractors(
-            path,
+        # Ensure the path is a string
+        repo_path = str(Path(path).absolute())
+
+        # Corrected: Using from_filesystem instead of from_custom_extractors
+        loader = GenericLoader.from_filesystem(
+            repo_path,
             glob="**/*.py",
             suffixes=[".py"],
             parser=LanguageParser(language=Language.PYTHON, parser_threshold=500)
         )
+        
         docs = loader.load()
         
-        # Use a splitter that understands Python syntax boundaries
+        if not docs:
+            return []
+
+        # Split code into logical chunks based on Python syntax
         splitter = RecursiveCharacterTextSplitter.from_language(
             language=Language.PYTHON, 
             chunk_size=self.chunk_size, 

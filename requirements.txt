@@ -420,3 +420,5 @@ yarl==1.22.0
     # via aiohttp
 zstandard==0.25.0
     # via langsmith
+tree-sitter>=0.21.3
+tree-sitter-languages>=1.10.0
