@@ -1,56 +1,34 @@
-"""Document processing module for dynamic URL loading and splitting"""
-from typing import List, Union
-from pathlib import Path
-from langchain_community.document_loaders import WebBaseLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+"""Document processing module for Code-Aware analysis"""
+from typing import List
+from langchain_community.document_loaders.generic import GenericLoader
+from langchain_community.document_loaders.parsers import LanguageParser
+from langchain_text_splitters import Language, RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 class DocumentProcessor:
-    """Handles document loading and processing from dynamic sources"""
+    """Handles code loading using Language-Aware parsing"""
     
-    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 50):
+    def __init__(self, chunk_size: int = 2000, chunk_overlap: int = 200):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
-        self.splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
+
+    def process_codebase(self, path: str) -> List[Document]:
+        """
+        Loads code files and splits them based on Language-specific syntax.
+        Focuses on Python files by default.
+        """
+        loader = GenericLoader.from_custom_extractors(
+            path,
+            glob="**/*.py",
+            suffixes=[".py"],
+            parser=LanguageParser(language=Language.PYTHON, parser_threshold=500)
         )
-
-    def load_from_url(self, url: str) -> List[Document]:
-        """Load document content from a single URL"""
-        try:
-            loader = WebBaseLoader(url)
-            return loader.load()
-        except Exception as e:
-            print(f"Error loading {url}: {e}")
-            return []
-
-    def load_documents(self, sources: List[str]) -> List[Document]:
-        """
-        Load documents primarily from URLs provided by the user.
-        """
-        docs: List[Document] = []
-        for src in sources:
-            src = src.strip()
-            if src.startswith("http://") or src.startswith("https://"):
-                docs.extend(self.load_from_url(src))
-            else:
-                # Optional: Handle local files if a path is provided instead of a URL
-                path = Path(src)
-                if path.exists():
-                    if path.is_dir():
-                        from langchain_community.document_loaders import PyPDFDirectoryLoader
-                        docs.extend(PyPDFDirectoryLoader(str(path)).load())
-                    elif path.suffix.lower() == ".txt":
-                        from langchain_community.document_loaders import TextLoader
-                        docs.extend(TextLoader(str(path), encoding="utf-8").load())
-        return docs
-    
-    def split_documents(self, documents: List[Document]) -> List[Document]:
-        """Split loaded documents into chunks"""
-        return self.splitter.split_documents(documents)
-    
-    def process_urls(self, urls: List[str]) -> List[Document]:
-        """Complete pipeline to load and split documents from user URLs"""
-        docs = self.load_documents(urls)
-        return self.split_documents(docs)
+        docs = loader.load()
+        
+        # Use a splitter that understands Python syntax boundaries
+        splitter = RecursiveCharacterTextSplitter.from_language(
+            language=Language.PYTHON, 
+            chunk_size=self.chunk_size, 
+            chunk_overlap=self.chunk_overlap
+        )
+        return splitter.split_documents(docs)
