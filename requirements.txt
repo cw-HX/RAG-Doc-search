@@ -422,3 +422,4 @@ zstandard==0.25.0
     # via langsmith
 tree-sitter>=0.21.3
 tree-sitter-languages>=1.10.0
+GitPython>=3.1.43

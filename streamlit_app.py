@@ -1,6 +1,5 @@
 import streamlit as st
 import sys
-import time
 from pathlib import Path
 
 # Fix pathing
@@ -21,13 +20,18 @@ def init_session():
     if 'rag_system' not in st.session_state:
         st.session_state.rag_system = None
 
-def initialize_explorer(path: str):
+def initialize_explorer(source: str, is_github: bool):
     try:
-        llm = Config.get_llm() # Uses llama-3.3-70b-versatile
+        llm = Config.get_llm()
         doc_processor = DocumentProcessor()
         vector_store = VectorStore()
         
-        documents = doc_processor.process_codebase(path)
+        with st.spinner(f"Analyzing {'GitHub' if is_github else 'Local'} repository..."):
+            if is_github:
+                documents = doc_processor.process_github_repo(source)
+            else:
+                documents = doc_processor.process_local_repo(source)
+        
         if not documents:
             return None, 0
             
@@ -44,58 +48,58 @@ def main():
     init_session()
     st.title("🏗️ Architectural Codebase Explorer")
 
-    # --- Sidebar: Repository Import ---
+    # --- Sidebar: Source Selection ---
     with st.sidebar:
-        st.header("📂 Import Codebase")
-        repo_path = st.text_input("Local Folder Path:", placeholder="/path/to/your/repo")
+        st.header("📂 Import Source")
+        import_type = st.radio("Choose Source Type:", ["Local Directory", "GitHub Repository"])
         
-        if st.button("🚀 Analyze Repository"):
-            if repo_path:
-                with st.spinner("Parsing code structures..."):
-                    rag, count = initialize_explorer(repo_path)
-                    if rag:
-                        st.session_state.rag_system = rag
-                        st.success(f"Analyzed {count} code blocks.")
+        if import_type == "Local Directory":
+            repo_input = st.text_input("Local Folder Path:", placeholder="/Users/name/projects/my-repo")
+            is_github = False
+        else:
+            repo_input = st.text_input("GitHub Clone URL:", placeholder="https://github.com/user/repo.git")
+            is_github = True
+        
+        if st.button("🚀 Analyze Codebase"):
+            if repo_input:
+                rag, count = initialize_explorer(repo_input, is_github)
+                if rag:
+                    st.session_state.rag_system = rag
+                    st.success(f"Success! Indexed {count} code structures.")
             else:
-                st.warning("Please enter a path.")
+                st.warning("Please enter a path or URL.")
 
     # --- Main Chat Interface ---
     if not st.session_state.rag_system:
-        st.info("👈 Please provide a local repository path in the sidebar to start the analysis.")
+        st.info("👈 Use the sidebar to import a repository and begin the architectural analysis.")
         return
 
-    # Display chat history
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-            if "diagram" in message and message["diagram"]:
-                with st.expander("📊 View Architecture Diagram"):
-                    st.code(message["diagram"], language="mermaid")
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if "diagram" in msg and msg["diagram"]:
+                with st.expander("📊 Architecture Diagram"):
+                    st.code(msg["diagram"], language="mermaid")
 
-    # Chat Input
-    if prompt := st.chat_input("Explain how the state management works..."):
+    if prompt := st.chat_input("Explain the main class interactions..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing architecture..."):
-                result = st.session_state.rag_system.run(prompt)
-                
-                # Show Answer
-                st.markdown(result['answer'])
-                
-                # Show Diagram
-                diagram_code = result.get('diagram')
-                if diagram_code:
-                    with st.expander("📊 View Architecture Diagram", expanded=True):
-                        st.code(diagram_code, language="mermaid")
-                
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": result['answer'],
-                    "diagram": diagram_code
-                })
+            result = st.session_state.rag_system.run(prompt)
+            st.markdown(result['answer'])
+            
+            diagram_code = result.get('diagram')
+            if diagram_code:
+                with st.expander("📊 Architecture Diagram", expanded=True):
+                    st.code(diagram_code, language="mermaid")
+            
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": result['answer'],
+                "diagram": diagram_code
+            })
 
 if __name__ == "__main__":
     main()
